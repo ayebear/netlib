@@ -60,8 +60,8 @@ These are used internally by the TcpServer.
   * setPort(port)
     * Automatically binds the port to an available one if nothing was passed in
   * getPort()
-  * send(packet)
-  * receive(packet)
+  * send(packet, address)
+  * receive(packet, address)
     * This will need to return information about the sender, so that the client can validate that it was the server who sent it
 
 #### PacketOrganizer
