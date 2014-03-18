@@ -44,9 +44,12 @@ void TcpServer::setDisconnectedCallback(CallbackType callback)
 
 bool TcpServer::send(sf::Packet& packet)
 {
-    bool status = false;
+    bool status = true;
     for (int id: clientIds)
-        status = send(packet, id);
+    {
+        if (!send(packet, id))
+            status = false;
+    }
     return status;
 }
 
@@ -60,32 +63,39 @@ bool TcpServer::send(sf::Packet& packet, int id)
 
 bool TcpServer::receive(sf::Packet& packet, int& id)
 {
-    // TODO: Improve the way this works. It should loop through ALL of the sockets instead of just
-        // the ones after the last one received.
-
     // Loop through all of the clients (from last position), until something is received
     // If nothing is received, then return false
     bool status = false;
-    if (clientPos >= (int)clientIds.size())
-        clientPos = 0;
-    for (; !status && clientPos < (int)clientIds.size(); ++clientPos)
+    int totalIds = clientIds.size();
+    // count is used so that this will check every client
+    for (int count = 0; !status && count < totalIds; ++clientPos, ++count)
     {
+        if (clientPos >= totalIds)
+            clientPos = 0;
         int clientId = clientIds[clientPos];
-        if (clientIsConnected(clientId) && clients[clientId]->receive(packet) == sf::Socket::Done)
+        if (clientIsConnected(clientId))
         {
-            status = true;
-            id = clientId;
-            //++clientPos; // So that next time this loops, it won't be on the same client
+            // Try to receive data from the socket
+            auto socketStatus = clients[clientId]->receive(packet);
+            if (socketStatus == sf::Socket::Done)
+            {
+                // Successfully received data
+                status = true;
+                id = clientId;
+            }
+            else if (socketStatus == sf::Socket::Error || socketStatus == sf::Socket::Disconnected)
+                clientsToRemove.push_back(clientId); // Remove the client
         }
     }
+    removeClientsToRemove();
     return status;
 }
 
-void TcpServer::update()
+bool TcpServer::update()
 {
-    // Could maybe have a max idle time for connected clients, if they haven't sent/received data
-    acceptNewClients();
+    // TODO: Could maybe have a max idle time for connected clients, if they haven't sent/received data
     removeOldClients();
+    return acceptNewClients();
 }
 
 sf::IpAddress TcpServer::getClientAddress(int id) const
@@ -112,26 +122,28 @@ bool TcpServer::clientIsConnected(int id) const
     return (id >= 0 && id < (int)clients.size() && clients[id] && clients[id]->getRemotePort() != 0);
 }
 
-void TcpServer::acceptNewClients()
+bool TcpServer::acceptNewClients()
 {
     // Accept and add any new clients
+    bool status = false;
     setupClient(tmpClient);
     while (listener.accept(*tmpClient) == sf::Socket::Done)
     {
         addClient(std::move(tmpClient));
+        status = true;
         setupClient(tmpClient);
     }
+    return status;
 }
 
 void TcpServer::removeOldClients()
 {
-    auto tmpIds = clientIds; // Need this because we are removing elements
-        // from the array being iterated through
-    for (int id: tmpIds)
+    for (int id: clientIds)
     {
         if (!clientIsConnected(id))
-            removeClient(id);
+            clientsToRemove.push_back(id);
     }
+    removeClientsToRemove();
 }
 
 int TcpServer::addClient(TcpSocketPtr newClient)
@@ -179,6 +191,13 @@ void TcpServer::setupClient(TcpSocketPtr& client)
         client.reset(new sf::TcpSocket());
         client->setBlocking(false);
     }
+}
+
+void TcpServer::removeClientsToRemove()
+{
+    for (int id: clientsToRemove)
+        removeClient(id);
+    clientsToRemove.clear();
 }
 
 }

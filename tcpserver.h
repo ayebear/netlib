@@ -39,7 +39,8 @@ class TcpServer
         bool send(sf::Packet& packet); // Send to all
         bool send(sf::Packet& packet, int id); // Send to specific client
         bool receive(sf::Packet& packet, int& id); // Returns true if a packet was received
-        void update(); // Accepts new connections and removes disconnected clients
+        bool update(); // Accepts new connections and removes disconnected clients
+            // Returns true if any new clients connected
 
         // Clients
         sf::IpAddress getClientAddress(int id) const; // Returns IP address of a client
@@ -47,11 +48,12 @@ class TcpServer
         bool clientIsConnected(int id) const; // Checks if a client is connected
 
     private:
-        void acceptNewClients();
+        bool acceptNewClients();
         void removeOldClients();
         int addClient(TcpSocketPtr newClient);
         void removeClient(int id);
         void setupClient(TcpSocketPtr& client);
+        void removeClientsToRemove(); // Removes all clients in clientsToRemove list
 
         sf::TcpListener listener; // Listener for new connections
         CallbackType connectedCallback;
@@ -60,8 +62,9 @@ class TcpServer
         std::vector<TcpSocketPtr> clients; // Stores the pointers to the sockets (or clients)
         std::vector<int> clientIds; // Uses this to iterate through the connected clients
         std::vector<int> freeClientIds; // These IDs can be reused for new clients
-        TcpSocketPtr tmpClient;
-        int clientPos;
+        std::vector<int> clientsToRemove; // Used to prevent loops from screwing up
+        TcpSocketPtr tmpClient; // This is used by the listener
+        int clientPos; // The current position in the clientIds vector
 };
 
 }

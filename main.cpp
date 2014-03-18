@@ -7,6 +7,7 @@
 #include <functional>
 #include "tcpserver.h"
 #include "tcpclient.h"
+#include "address.h"
 
 using std::cout;
 
@@ -22,6 +23,9 @@ class ExampleServer
 
     private:
         net::TcpServer server;
+        sf::Clock delay; // Just used to make sure the clients are disconnecting properly
+        sf::Clock idleTimer; // Used to switch the server between full-performance and idle mode
+        int idleTime; // In milliseconds
         bool running;
 };
 
@@ -29,6 +33,10 @@ int main()
 {
     ExampleServer server;
     server.start();
+    //net::Address someAddress("10.0.0.2", 12345);
+    //std::cout << someAddress.toString() << std::endl;
+    //someAddress.set("192.168.1.1:443");
+    //std::cout << someAddress.toString() << std::endl;
     return 0;
 }
 
@@ -46,6 +54,7 @@ ExampleServer::ExampleServer():
 void ExampleServer::start()
 {
     // Variables used by the loop
+    idleTime = 1000;
     running = true;
     sf::Packet packet;
     int id = 0;
@@ -56,12 +65,21 @@ void ExampleServer::start()
 
     cout << "SERVER: Server is running...\n";
     // This is what a main loop could look like
-    while (running)
+    while (running || delay.getElapsedTime().asSeconds() <= 2)
     {
-        server.update();
-        if (server.receive(packet, id))
+        bool updated = server.update();
+        bool received = server.receive(packet, id);
+        if (received)
             handlePacket(packet, id);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // TODO: Find a better way to handle limiting the CPU cycles...
+        if (!updated && !received)
+        {
+            if (idleTimer.getElapsedTime().asMilliseconds() > idleTime)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // else, stay in performance mode and don't sleep any
+        }
+        else
+            idleTimer.restart();
     }
     cout << "SERVER: Server finished running.\n";
 }
@@ -73,7 +91,11 @@ void ExampleServer::handlePacket(sf::Packet& packet, int id)
     packet >> str;
     cout << "SERVER: Packet contains: \"" << str << "\"\n";
     if (str == "quit")
+    {
         running = false;
+        delay.restart();
+        cout << "SERVER: Shutting down...\n";
+    }
     else if (str == "kickme")
         server.kickClient(id);
 }
@@ -91,7 +113,7 @@ void ExampleServer::clientDisconnected(int id)
 void ExampleServer::createClients()
 {
     // Just testing some connections...
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    /*std::this_thread::sleep_for(std::chrono::milliseconds(500));
     cout << "CLIENT: Creating clients...\n";
     net::TcpClient client1;
     net::TcpClient client2;
@@ -123,4 +145,26 @@ void ExampleServer::createClients()
     client1.send(packet3);
 
     cout << "CLIENT: Disconnecting clients...\n";
+    client1.disconnect();
+    client2.disconnect();
+    client3.disconnect();
+    client4.disconnect();
+    cout << "CLIENT: Disconnected clients.\n";*/
+
+    // Stress testing
+    net::TcpClient clients[20];
+    for (auto& client: clients)
+        client.connect(sf::IpAddress::LocalHost, 2500);
+    cout << "CLIENT: Clients done connecting. Will spam in 5 seconds.\n";
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    cout << "CLIENT: SPAMMING 2000 PACKETS!!!\n";
+    sf::Packet packet;
+    packet << "SPAMMMMMMM";
+    for (int i = 0; i < 100; ++i)
+        for (auto& client: clients)
+            client.send(packet);
+    packet.clear();
+    packet << "quit";
+    clients[0].send(packet);
+    cout << "CLIENT: Done spamming.\n";
 }
