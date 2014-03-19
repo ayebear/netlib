@@ -8,7 +8,6 @@
 #include <memory>
 #include <functional>
 #include <SFML/Network.hpp>
-#include "clientmanager.h"
 
 namespace net
 {

@@ -6,13 +6,16 @@
 #include <thread>
 #include <functional>
 #include "tcpserver.h"
-#include "tcpclient.h"
 #include "address.h"
+#include "packetorganizer.h"
 
 using std::cout;
+using std::endl;
 
 class ExampleServer
 {
+    enum PacketTypes {Msg = 0, Cmd, Test, TotalTypes};
+
     public:
         ExampleServer();
         void start();
@@ -103,6 +106,17 @@ void ExampleServer::handlePacket(sf::Packet& packet, int id)
 void ExampleServer::clientConnected(int id)
 {
     cout << "SERVER: Client " << id << " connected.\n";
+    sf::Packet packet;
+    packet << Msg << "Welcome to the Example Server!";
+    server.send(packet, id);
+    packet.clear();
+    packet << Cmd << "sudo make me a sandwich";
+    server.send(packet, id);
+    server.send(packet, id);
+    server.send(packet, id);
+    packet.clear();
+    packet << Test << 123 << 456;
+    server.send(packet, id);
 }
 
 void ExampleServer::clientDisconnected(int id)
@@ -152,7 +166,7 @@ void ExampleServer::createClients()
     cout << "CLIENT: Disconnected clients.\n";*/
 
     // Stress testing
-    net::TcpClient clients[20];
+    /*net::TcpClient clients[20];
     for (auto& client: clients)
         client.connect(sf::IpAddress::LocalHost, 2500);
     cout << "CLIENT: Clients done connecting. Will spam in 5 seconds.\n";
@@ -166,5 +180,40 @@ void ExampleServer::createClients()
     packet.clear();
     packet << "quit";
     clients[0].send(packet);
-    cout << "CLIENT: Done spamming.\n";
+    cout << "CLIENT: Done spamming.\n";*/
+
+    // Packet organizer testing
+    net::PacketOrganizer client;
+    client.connect(sf::IpAddress::LocalHost, 2500);
+    client.setValidTypeRange(0, TotalTypes);
+    sf::Clock connectionTimer;
+    std::string str;
+    // This is just a test loop, I might add callback support for handling packets of specific types
+    // That way your loop would only have to call receive, and maybe handle or invoke callbacks
+    while (client.isConnected() && connectionTimer.getElapsedTime().asSeconds() < 3)
+    {
+        client.receive();
+        if (client.arePackets(Msg))
+        {
+            client.getPacket(Msg) >> str;
+            cout << "CLIENT: Msg packet received: " << str << endl;
+            client.popPacket(Msg);
+        }
+        else if (client.arePackets(Cmd))
+        {
+            client.getPacket(Cmd) >> str;
+            cout << "CLIENT: Cmd packet received: " << str << endl;
+            client.popPacket(Cmd);
+        }
+        else if (client.arePackets(Test))
+        {
+            int x, y;
+            client.getPacket(Test) >> x >> y;
+            cout << "CLIENT: Test packet received: " << x << ", " << y << endl;
+            client.popPacket(Test);
+        }
+    }
+    sf::Packet packet;
+    packet << "quit";
+    client.tcpSend(packet);
 }
