@@ -30,17 +30,18 @@ Non-blocking sockets are used without threads, so in order for packets to be rec
     the receive() method, which will populate the containers with any new packets received.
 To read the packets, you would use getPacket() if there arePackets() for that type.
     Then, you would call popPacket() so that the next call to getPacket() won't return the same packet.
+Alternatively, you can register callbacks to functions with this signature:
+    void handlePacket(sf::Packet& packet);
+    using the registerCallback() method. Then, every time invokeCallbacks() is called, the registered
+    callbacks will be called for any new packets received. A callback will be called for each packet,
+    and those packets will automatically be removed.
 
 Near-future plans:
-    Make it more clear on what uses TCP and what uses UDP
-    Allow automatic callbacks for specific packet types
-        Registering a callback for a type would mean that all of the packets received of that type
-        will be handled by the callback, and then automatically popped off. This means you won't
-        ever need to manually handle those types as long as you call the method for invoking the
-        callbacks.
-        There could also be a way to invoke just a specific type of callback, but it might be ok
-        to just handle them all.
+    Make it more clear on what uses TCP and what uses UDP by naming them more specifically.
+    Possibly call invokeCallbacks in the receive method. Or maybe keep it separate and make a new
+        method called update() or something that calls both. And maybe rename it to handlePackets.
     Make the packet header type templated
+        This would let you use a string, char, or anything else
     Allow raw binary packets (not sure if there is an easy way to determine this)
         They could just be stored in their own separate deque
 */
