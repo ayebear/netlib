@@ -22,9 +22,15 @@ class ExampleServer
         void handlePacket(sf::Packet& packet, int id);
         void clientConnected(int id);
         void clientDisconnected(int id);
-        void createClients();
 
     private:
+        // These would normally be on the client-side but are just running in another thread
+        // for easy testing.
+        void runTests();
+        void handleMsg(sf::Packet& packet);
+        void handleCmd(sf::Packet& packet);
+        void handleTest(sf::Packet& packet);
+
         net::TcpServer server;
         sf::Clock delay; // Just used to make sure the clients are disconnecting properly
         sf::Clock idleTimer; // Used to switch the server between full-performance and idle mode
@@ -63,7 +69,7 @@ void ExampleServer::start()
     int id = 0;
 
     // Create a thread to represent some clients
-    std::thread clientTestingThread(&ExampleServer::createClients, this);
+    std::thread clientTestingThread(&ExampleServer::runTests, this);
     clientTestingThread.detach();
 
     cout << "SERVER: Server is running...\n";
@@ -124,47 +130,8 @@ void ExampleServer::clientDisconnected(int id)
     cout << "SERVER: Client " << id << " disconnected.\n";
 }
 
-void ExampleServer::createClients()
+void ExampleServer::runTests()
 {
-    // Just testing some connections...
-    /*std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    cout << "CLIENT: Creating clients...\n";
-    net::TcpClient client1;
-    net::TcpClient client2;
-    net::TcpClient client3;
-    //cout << "Client side: client1 connecting...\n";
-    client1.connect(sf::IpAddress::LocalHost, 2500);
-    //cout << "Client side: client2 connecting...\n";
-    client2.connect(sf::IpAddress::LocalHost, 2500);
-    //cout << "Client side: client3 connecting...\n";
-    client3.connect(sf::IpAddress::LocalHost, 2500);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    cout << "CLIENT: Sending test packets...\n";
-    sf::Packet packet;
-    packet << "testing";
-    if (!client1.send(packet))
-        cout << "CLIENT: ERROR SENDING PACKET\n";
-    client2.send(packet);
-    sf::Packet packet2;
-    packet2 << "another test";
-    client3.send(packet2);
-
-    client1.disconnect();
-    client1.connect(sf::IpAddress::LocalHost, 2500);
-    net::TcpClient client4;
-    client4.connect(sf::IpAddress::LocalHost, 2500);
-    sf::Packet packet3;
-    packet3 << "quit";
-    client4.send(packet);
-    client1.send(packet3);
-
-    cout << "CLIENT: Disconnecting clients...\n";
-    client1.disconnect();
-    client2.disconnect();
-    client3.disconnect();
-    client4.disconnect();
-    cout << "CLIENT: Disconnected clients.\n";*/
-
     // Stress testing
     /*net::TcpClient clients[20];
     for (auto& client: clients)
@@ -188,32 +155,39 @@ void ExampleServer::createClients()
     client.setValidTypeRange(0, TotalTypes);
     sf::Clock connectionTimer;
     std::string str;
-    // This is just a test loop, I might add callback support for handling packets of specific types
-    // That way your loop would only have to call receive, and maybe handle or invoke callbacks
+    // Register callbacks for packet handling:
+    using std::placeholders::_1;
+    client.registerCallback(Msg, std::bind(&ExampleServer::handleMsg, this, _1));
+    client.registerCallback(Cmd, std::bind(&ExampleServer::handleCmd, this, _1));
+    client.registerCallback(Test, std::bind(&ExampleServer::handleTest, this, _1));
+    // Client's main loop
     while (client.isConnected() && connectionTimer.getElapsedTime().asSeconds() < 3)
     {
         client.receive();
-        if (client.arePackets(Msg))
-        {
-            client.getPacket(Msg) >> str;
-            cout << "CLIENT: Msg packet received: " << str << endl;
-            client.popPacket(Msg);
-        }
-        else if (client.arePackets(Cmd))
-        {
-            client.getPacket(Cmd) >> str;
-            cout << "CLIENT: Cmd packet received: " << str << endl;
-            client.popPacket(Cmd);
-        }
-        else if (client.arePackets(Test))
-        {
-            int x, y;
-            client.getPacket(Test) >> x >> y;
-            cout << "CLIENT: Test packet received: " << x << ", " << y << endl;
-            client.popPacket(Test);
-        }
+        client.invokeCallbacks();
     }
     sf::Packet packet;
     packet << "quit";
     client.tcpSend(packet);
+}
+
+void ExampleServer::handleMsg(sf::Packet& packet)
+{
+    std::string str;
+    packet >> str;
+    cout << "CLIENT: Msg packet received: " << str << endl;
+}
+
+void ExampleServer::handleCmd(sf::Packet& packet)
+{
+    std::string str;
+    packet >> str;
+    cout << "CLIENT: Cmd packet received: " << str << endl;
+}
+
+void ExampleServer::handleTest(sf::Packet& packet)
+{
+    int x, y;
+    packet >> x >> y;
+    cout << "CLIENT: Test packet received: " << x << ", " << y << endl;
 }

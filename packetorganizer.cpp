@@ -112,10 +112,34 @@ void PacketOrganizer::setValidTypeRange(PacketType min, PacketType max)
     typeRangeSet = true;
 }
 
+void PacketOrganizer::registerCallback(PacketType type, CallbackType callback)
+{
+    callbacks[type] = callback;
+}
+
+void PacketOrganizer::invokeCallbacks()
+{
+    // Loop through each registered callback
+    for (auto& handler: callbacks)
+    {
+        auto type = handler.first;
+        auto callback = handler.second;
+        if (callback) // Make sure the callback was set properly
+        {
+            // Handle all of the packets received of this type
+            while (arePackets(type))
+            {
+                callback(getPacket(type));
+                popPacket(type);
+            }
+        }
+    }
+}
+
 void PacketOrganizer::storePacket(sf::Packet& packet)
 {
     PacketType type = -1;
-	if (packet >> type && isValidType(type))
+    if (packet >> type && isValidType(type))
         packets[type].push_back(packet);
 }
 

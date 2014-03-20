@@ -7,6 +7,7 @@
 #include <map>
 #include <deque>
 #include <set>
+#include <functional>
 #include <SFML/Network.hpp>
 #include "address.h"
 
@@ -48,6 +49,7 @@ class PacketOrganizer
     using PacketType = sf::Int32;
     using PacketQueue = std::deque<sf::Packet>;
     using AddressSet = std::set<Address>;
+    using CallbackType = std::function<void(sf::Packet&)>;
 
     public:
         // Constructors/setup
@@ -76,19 +78,35 @@ class PacketOrganizer
         void setValidTypeRange(PacketType min, PacketType max);
             // Newly received packets will only be accepted if within this range
 
-    private:
-        void storePacket(sf::Packet& packet);
-        bool isValidType(PacketType type) const;
-        bool isSafeAddress(const Address& address) const;
+        // Callbacks for handling packets
+        void registerCallback(PacketType type, CallbackType callback);
+            // Registers (or re-registers) a callback for a specific packet type
+        void invokeCallbacks();
+            // Calls all of the callbacks registered for the packet types received
 
+    private:
+        void storePacket(sf::Packet& packet); // Stores packets into the map
+        bool isValidType(PacketType type) const; // Applies if you have a valid type range set
+        bool isSafeAddress(const Address& address) const; // Applies if you set the safe addresses
+
+        // Sockets
         sf::TcpSocket tcpSocket;
         sf::UdpSocket udpSocket;
         bool tcpConnected;
         bool udpReady;
+
+        // All of the received packets are stored here
         std::map<PacketType, PacketQueue> packets;
+
+        // Callbacks are stored in here
+        std::map<PacketType, CallbackType> callbacks;
+
+        // Valid packet type range
         PacketType minType;
         PacketType maxType;
         bool typeRangeSet;
+
+        // UDP packets will only be received from these addresses
         AddressSet safeAddresses;
 };
 
