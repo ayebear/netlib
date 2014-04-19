@@ -39,6 +39,13 @@ void PacketOrganizer::setSafeAddresses(AddressSet& addresses)
     safeAddresses = addresses;
 }
 
+bool PacketOrganizer::update()
+{
+    bool status = receive();
+    handlePackets();
+    return status;
+}
+
 bool PacketOrganizer::receive()
 {
     bool status = false;
@@ -117,7 +124,7 @@ void PacketOrganizer::registerCallback(PacketType type, CallbackType callback)
     callbacks[type] = callback;
 }
 
-void PacketOrganizer::invokeCallbacks()
+void PacketOrganizer::handlePackets()
 {
     // Loop through each registered callback
     for (auto& handler: callbacks)

@@ -31,15 +31,13 @@ Non-blocking sockets are used without threads, so in order for packets to be rec
 To read the packets, you would use getPacket() if there arePackets() for that type.
     Then, you would call popPacket() so that the next call to getPacket() won't return the same packet.
 Alternatively, you can register callbacks to functions with this signature:
-    void handlePacket(sf::Packet& packet);
-    using the registerCallback() method. Then, every time invokeCallbacks() is called, the registered
+    void handleSomePacketType(sf::Packet& packet);
+    using the registerCallback() method. Then, every time handlePackets() is called, the registered
     callbacks will be called for any new packets received. A callback will be called for each packet,
     and those packets will automatically be removed.
 
 Near-future plans:
     Make it more clear on what uses TCP and what uses UDP by naming them more specifically.
-    Possibly call invokeCallbacks in the receive method. Or maybe keep it separate and make a new
-        method called update() or something that calls both. And maybe rename it to handlePackets.
     Make the packet header type templated
         This would let you use a string, char, or anything else
     Allow raw binary packets (not sure if there is an easy way to determine this)
@@ -64,6 +62,7 @@ class PacketOrganizer
             // Note: If this is not set, then it will accept all packets
 
         // Communication
+        bool update(); // Calls receive and handlePackets
         bool receive(); // Tries to receive data on all sockets, returns true if anything was received
         bool tcpSend(sf::Packet& packet);
         bool udpSend(sf::Packet& packet, const Address& address);
@@ -82,7 +81,7 @@ class PacketOrganizer
         // Callbacks for handling packets
         void registerCallback(PacketType type, CallbackType callback);
             // Registers (or re-registers) a callback for a specific packet type
-        void invokeCallbacks();
+        void handlePackets();
             // Calls all of the callbacks registered for the packet types received
 
     private:
