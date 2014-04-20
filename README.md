@@ -87,8 +87,42 @@ server.join();
 ##### Example usage
 
 ```
+// It is recommended to setup an enum for the packet types
+enum PacketTypes {Message = 0, AddNumbers, TotalTypes};
+
+// You can make separate functions or lambdas for handling packets
+auto handleMessage = [](sf::Packet& packet)
+{
+    std::string str;
+    if (packet >> str)
+        std::cout << "Message received: " << str << std::endl;
+}
+
+auto handleAddNumbers = [](sf::Packet& packet)
+{
+    int a = 0;
+    int b = 0;
+    if (packet >> a >> b)
+        std::cout << a << " + " << b << " = " << (a + b) << std::endl;
+}
+
+// Create a packet organizer object
 net::PacketOrganizer client;
-// More will be here later.
+
+// Set the valid range of packet types to receive
+client.setValidTypeRange(0, TotalTypes);
+
+// Register callbacks for packet handling functions
+client.registerCallback(Message, handleMessage);
+client.registerCallback(AddNumbers, handleAddNumbers);
+
+// In some loop (like your application's loop), call update()
+client.update();
+// This will receive and store all valid packets,
+// and invoke the callbacks to handle them.
+
+// You can also send packets to the server you are connected to
+client.tcpSend(packet);
 ```
 
 ### Other
