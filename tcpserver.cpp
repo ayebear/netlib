@@ -34,8 +34,7 @@ TcpServer::~TcpServer()
 {
     // Wait for the thread to finish if it is running
     running = false;
-    if (serverThread.joinable())
-        serverThread.join();
+    join();
 }
 
 void TcpServer::setListeningPort(unsigned short port)
@@ -99,8 +98,7 @@ void TcpServer::start()
 void TcpServer::stop()
 {
     running = false;
-    if (serverThread.joinable())
-        serverThread.join();
+    join();
     LockType lock(internalMutex);
     selector.clear();
     selector.add(listener);
@@ -108,6 +106,12 @@ void TcpServer::stop()
     clientIds.clear();
     freeClientIds.clear();
     clientsToRemove.clear();
+}
+
+void TcpServer::join()
+{
+    if (serverThread.joinable())
+        serverThread.join();
 }
 
 sf::IpAddress TcpServer::getClientAddress(int id) const

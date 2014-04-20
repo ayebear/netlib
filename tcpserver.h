@@ -64,6 +64,7 @@ class TcpServer
         bool send(sf::Packet& packet, int id); // Send to specific client
         void start(); // Launches the server loop thread
         void stop(); // Stops the server loop thread
+        void join(); // Waits for the server thread to finish running
 
         // Clients
         sf::IpAddress getClientAddress(int id) const; // Returns IP address of a client

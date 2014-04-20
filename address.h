@@ -20,6 +20,7 @@ struct Address
     Address(const std::string& str, unsigned short p); // The string here should just be the IP
     bool set(const std::string& str);
     bool set(const std::string& str, unsigned short p);
+    bool operator=(const std::string& str);
     std::string toString() const;
 
     // For use with associative containers

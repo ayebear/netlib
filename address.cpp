@@ -55,6 +55,11 @@ bool Address::set(const std::string& str, unsigned short p)
     return true;
 }
 
+bool Address::operator=(const std::string& str)
+{
+    return set(str);
+}
+
 std::string Address::toString() const
 {
     std::ostringstream tmpStream;
