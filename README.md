@@ -96,7 +96,7 @@ auto handleMessage = [](sf::Packet& packet)
     std::string str;
     if (packet >> str)
         std::cout << "Message received: " << str << std::endl;
-}
+};
 
 auto handleAddNumbers = [](sf::Packet& packet)
 {
@@ -104,7 +104,7 @@ auto handleAddNumbers = [](sf::Packet& packet)
     int b = 0;
     if (packet >> a >> b)
         std::cout << a << " + " << b << " = " << (a + b) << std::endl;
-}
+};
 
 // Create a packet organizer object
 net::PacketOrganizer client;
@@ -122,6 +122,7 @@ client.update();
 // and invoke the callbacks to handle them.
 
 // You can also send packets to the server you are connected to
+sf::Packet packet;
 client.tcpSend(packet);
 ```
 
