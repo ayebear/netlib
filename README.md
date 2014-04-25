@@ -19,7 +19,7 @@ For more advanced usage of these classes, please refer to the header files.
 
 * This class handles managing TCP connections to multiple clients.
 * It uses a single thread for both handling connections and receiving packets.
-* You can easily connect to this using a TCP socket or the PacketOrganizer.
+* You can easily connect to this using a TCP socket or a net::Client.
 * Callbacks can be set for the following events:
   * Client connected
     * Callback type: void(int)
@@ -76,7 +76,7 @@ server.join();
 
 ### Client-side:
 
-#### PacketOrganizer
+#### Client
 
 * This class handles receiving/sending packets through TCP and/or UDP.
 * It will automatically put the packets it receives into different queues based on the first value in the packet, or the packet "type".
@@ -87,6 +87,8 @@ server.join();
 ##### Example usage
 
 ```
+#include "client.h"
+
 // It is recommended to setup an enum for the packet types
 enum PacketTypes {Message = 0, AddNumbers, TotalTypes};
 
@@ -106,8 +108,8 @@ auto handleAddNumbers = [](sf::Packet& packet)
         std::cout << a << " + " << b << " = " << (a + b) << std::endl;
 };
 
-// Create a packet organizer object
-net::PacketOrganizer client;
+// Create a client object
+net::Client client;
 
 // Set the valid range of packet types to receive
 client.setValidTypeRange(0, TotalTypes);

@@ -1,8 +1,8 @@
 // See the file COPYRIGHT.txt for authors and copyright information.
 // See the file LICENSE.txt for copying conditions.
 
-#ifndef PACKETORGANIZER_H
-#define PACKETORGANIZER_H
+#ifndef CLIENT_H
+#define CLIENT_H
 
 #include <map>
 #include <deque>
@@ -15,8 +15,9 @@ namespace net
 {
 
 /*
-About PacketOrganizer:
-This class handles receiving packets and storing them into different containers based on their type.
+About Client:
+This class handles connecting to a server, and receiving/sending packets through UDP or TCP.
+Received packets are stored into different containers based on their type.
     Note: It only handles sf::Packet type packets.
     Also, the packet type should be the first element in the packet and a 32-bit int.
 It is meant to be used with client-side applications, and can communicate with a single server.
@@ -43,7 +44,7 @@ Near-future plans:
     Allow raw binary packets (not sure if there is an easy way to determine this)
         They could just be stored in their own separate deque
 */
-class PacketOrganizer
+class Client
 {
     using PacketType = sf::Int32;
     using PacketQueue = std::deque<sf::Packet>;
@@ -52,7 +53,7 @@ class PacketOrganizer
 
     public:
         // Constructors/setup
-        PacketOrganizer();
+        Client();
         bool connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout=sf::Time::Zero);
         bool connect(const Address& address, sf::Time timeout=sf::Time::Zero);
             // Note that packets can only be received from the connected address through TCP, so there

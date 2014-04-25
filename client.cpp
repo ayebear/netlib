@@ -1,12 +1,12 @@
 // See the file COPYRIGHT.txt for authors and copyright information.
 // See the file LICENSE.txt for copying conditions.
 
-#include "packetorganizer.h"
+#include "client.h"
 
 namespace net
 {
 
-PacketOrganizer::PacketOrganizer():
+Client::Client():
     tcpConnected(false),
     udpReady(false),
     typeRangeSet(false)
@@ -15,7 +15,7 @@ PacketOrganizer::PacketOrganizer():
     tcpSocket.setBlocking(false);
 }
 
-bool PacketOrganizer::connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout)
+bool Client::connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout)
 {
     tcpSocket.setBlocking(true);
     tcpConnected = (tcpSocket.connect(address, port, timeout) == sf::Socket::Done);
@@ -23,30 +23,30 @@ bool PacketOrganizer::connect(const sf::IpAddress& address, unsigned short port,
     return tcpConnected;
 }
 
-bool PacketOrganizer::connect(const Address& address, sf::Time timeout)
+bool Client::connect(const Address& address, sf::Time timeout)
 {
     return connect(address.ip, address.port, timeout);
 }
 
-void PacketOrganizer::setUdpPort(unsigned short port)
+void Client::setUdpPort(unsigned short port)
 {
     udpSocket.bind(port);
     udpReady = true;
 }
 
-void PacketOrganizer::setSafeAddresses(AddressSet& addresses)
+void Client::setSafeAddresses(AddressSet& addresses)
 {
     safeAddresses = addresses;
 }
 
-bool PacketOrganizer::update()
+bool Client::update()
 {
     bool status = receive();
     handlePackets();
     return status;
 }
 
-bool PacketOrganizer::receive()
+bool Client::receive()
 {
     bool status = false;
     Address address;
@@ -65,66 +65,66 @@ bool PacketOrganizer::receive()
     return status;
 }
 
-bool PacketOrganizer::tcpSend(sf::Packet& packet)
+bool Client::tcpSend(sf::Packet& packet)
 {
     return (tcpSocket.send(packet) == sf::Socket::Done);
 }
 
-bool PacketOrganizer::udpSend(sf::Packet& packet, const Address& address)
+bool Client::udpSend(sf::Packet& packet, const Address& address)
 {
     return (udpSocket.send(packet, address.ip, address.port) == sf::Socket::Done);
 }
 
-bool PacketOrganizer::udpSend(sf::Packet& packet, const sf::IpAddress& address, unsigned short port)
+bool Client::udpSend(sf::Packet& packet, const sf::IpAddress& address, unsigned short port)
 {
     return (udpSocket.send(packet, address, port) == sf::Socket::Done);
 }
 
-bool PacketOrganizer::isConnected() const
+bool Client::isConnected() const
 {
     return tcpConnected;
 }
 
-sf::Packet& PacketOrganizer::getPacket(PacketType type)
+sf::Packet& Client::getPacket(PacketType type)
 {
     return (packets[type].front());
 }
 
-bool PacketOrganizer::popPacket(PacketType type)
+bool Client::popPacket(PacketType type)
 {
     packets[type].pop_front();
     return (arePackets(type));
 }
 
-bool PacketOrganizer::arePackets(PacketType type) const
+bool Client::arePackets(PacketType type) const
 {
     auto found = packets.find(type);
     return (found != packets.end() && !found->second.empty());
 }
 
-void PacketOrganizer::clear()
+void Client::clear()
 {
     packets.clear();
 }
 
-void PacketOrganizer::clear(PacketType type)
+void Client::clear(PacketType type)
 {
     packets[type].clear();
 }
 
-void PacketOrganizer::setValidTypeRange(PacketType min, PacketType max)
+void Client::setValidTypeRange(PacketType min, PacketType max)
 {
     minType = min;
     maxType = max;
     typeRangeSet = true;
 }
 
-void PacketOrganizer::registerCallback(PacketType type, CallbackType callback)
+void Client::registerCallback(PacketType type, CallbackType callback)
 {
     callbacks[type] = callback;
 }
 
-void PacketOrganizer::handlePackets()
+void Client::handlePackets()
 {
     // Loop through each registered callback
     for (auto& handler: callbacks)
@@ -143,19 +143,19 @@ void PacketOrganizer::handlePackets()
     }
 }
 
-void PacketOrganizer::storePacket(sf::Packet& packet)
+void Client::storePacket(sf::Packet& packet)
 {
     PacketType type = -1;
     if (packet >> type && isValidType(type))
         packets[type].push_back(packet);
 }
 
-bool PacketOrganizer::isValidType(PacketType type) const
+bool Client::isValidType(PacketType type) const
 {
     return (!typeRangeSet || (type >= minType && type <= maxType));
 }
 
-bool PacketOrganizer::isSafeAddress(const Address& address) const
+bool Client::isSafeAddress(const Address& address) const
 {
     return (safeAddresses.empty() || safeAddresses.find(address) != safeAddresses.end());
 }
