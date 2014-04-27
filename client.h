@@ -56,6 +56,7 @@ class Client
         Client();
         bool connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout=sf::Time::Zero);
         bool connect(const Address& address, sf::Time timeout=sf::Time::Zero);
+        void disconnect();
             // Note that packets can only be received from the connected address through TCP, so there
             // is no need for checking for safe addresses.
         void setUdpPort(unsigned short port); // Bind UDP port to receive data on

@@ -45,6 +45,8 @@ bool Address::set(const std::string& str)
             port = tmpPort;
         }
     }
+    else
+        status = set(str, 0); // Just parse the IP, and set the port to 0
     return status;
 }
 

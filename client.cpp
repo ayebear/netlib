@@ -28,6 +28,11 @@ bool Client::connect(const Address& address, sf::Time timeout)
     return connect(address.ip, address.port, timeout);
 }
 
+void Client::disconnect()
+{
+    tcpSocket.disconnect();
+}
+
 void Client::setUdpPort(unsigned short port)
 {
     udpSocket.bind(port);
