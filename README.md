@@ -44,13 +44,17 @@ For more advanced usage of these classes, please refer to the header files.
 // Create a TCP server, and listen on port 2500
 net::TcpServer server(2500);
 
+// You can also set the listening port after construction
+net::TcpServer server;
+server.setListeningPort(2500);
+
 // Setup callbacks
-// Bind to a real function (you can also use a lambda)
 using namespace std::placeholders;
 server.setPacketCallback(std::bind(&MyServer::handlePacket, this, _1, _2));
-// You can also set callbacks for when clients connect and disconnect
+server.setConnectedCallback(std::bind(&MyServer::handleClientConnected, this, _1));
+server.setDisconnectedCallback(std::bind(&MyServer::handleClientDisconnected, this, _1));
 
-// Start the server
+// Start the server (spawns a new thread, then returns)
 server.start();
 
 // Do other things while the server is running
@@ -72,6 +76,7 @@ server.stop();
 
 // If you don't want the server to stop, call join() instead of stop()
 server.join();
+// This will block forever as long as the server is running
 ```
 
 ### Client-side:
@@ -83,6 +88,7 @@ server.join();
 * There is callback support for handling these packets automatically.
   * Callback type: void(sf::Packet&)
   * You can register a callback for each packet type, using the registerCallback() method.
+  * Note: The callbacks are called in order of the packet type, from smallest to largest.
 
 ##### Example usage
 
@@ -117,11 +123,13 @@ client.setValidTypeRange(0, TotalTypes);
 // Register callbacks for packet handling functions
 client.registerCallback(Message, handleMessage);
 client.registerCallback(AddNumbers, handleAddNumbers);
+// Note: You can register as many callbacks as you'd like, but only one per type.
 
 // In some loop (like your application's loop), call update()
 client.update();
 // This will receive and store all valid packets,
 // and invoke the callbacks to handle them.
+// If you don't want to use callbacks, you can use the arePackets/getPacket/popPacket functions.
 
 // You can also send packets to the server you are connected to
 sf::Packet packet;
