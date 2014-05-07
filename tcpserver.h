@@ -46,6 +46,12 @@ class TcpServer
     using LockType = std::unique_lock<std::recursive_mutex>;
 
     public:
+        #ifdef _WIN32
+            static const unsigned maxConnections = 63;
+        #else
+            static const unsigned maxConnections = 1023;
+        #endif
+
         // Constructors/setup
         TcpServer();
         TcpServer(unsigned short port);
@@ -55,6 +61,7 @@ class TcpServer
         void setConnectedCallback(CallbackType callback);
         void setDisconnectedCallback(CallbackType callback);
         void setPacketCallback(PacketCallbackType callback);
+        bool setConnectionLimit(unsigned connections = maxConnections);
 
         // Thread synchronization
         LockType getLock();
@@ -107,6 +114,7 @@ class TcpServer
         TcpSocketPtr tmpClient; // This is used by the listener
         int clientPos; // The current position in the clientIds vector
         bool listenerAdded;
+        unsigned connectionLimit; // Maximum number of open sockets
 };
 
 }

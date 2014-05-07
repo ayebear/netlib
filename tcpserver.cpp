@@ -13,6 +13,7 @@ TcpServer::TcpServer()
     clientPos = 0;
     listener.setBlocking(true);
     listenerAdded = false;
+    connectionLimit = maxConnections;
 }
 
 TcpServer::TcpServer(unsigned short port):
@@ -61,6 +62,16 @@ void TcpServer::setDisconnectedCallback(CallbackType callback)
 void TcpServer::setPacketCallback(PacketCallbackType callback)
 {
     packetCallback = callback;
+}
+
+bool TcpServer::setConnectionLimit(unsigned connections)
+{
+    if (connections <= maxConnections)
+    {
+        connectionLimit = connections;
+        return true;
+    }
+    return false;
 }
 
 TcpServer::LockType TcpServer::getLock()
@@ -199,7 +210,13 @@ void TcpServer::acceptNewClient()
     // Accept and add a new client
     setupClient(tmpClient);
     if (listener.accept(*tmpClient) == sf::Socket::Done)
-        addClient(std::move(tmpClient));
+    {
+        // Gracefully close any new connections over the limit
+        if (clients.size() <= connectionLimit)
+            addClient(std::move(tmpClient));
+        else
+            tmpClient.reset();
+    }
 }
 
 void TcpServer::removeOldClients()
