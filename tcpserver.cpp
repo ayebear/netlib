@@ -212,7 +212,7 @@ void TcpServer::acceptNewClient()
     if (listener.accept(*tmpClient) == sf::Socket::Done)
     {
         // Gracefully close any new connections over the limit
-        if (clients.size() < connectionLimit)
+        if (clientIds.size() < connectionLimit)
             addClient(std::move(tmpClient));
         else
             tmpClient.reset();
