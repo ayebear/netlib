@@ -2,18 +2,17 @@
 // See the file LICENSE.txt for copying conditions.
 
 #include "tcpserver.h"
-//#include <iostream>
-//using std::cout;
 
 namespace net
 {
 
-TcpServer::TcpServer()
+TcpServer::TcpServer():
+    lastId(0),
+    listenerAdded(false),
+    connectionLimit(maxConnections),
+    timeout(0.0f)
 {
-    clientPos = 0;
     listener.setBlocking(true);
-    listenerAdded = false;
-    connectionLimit = maxConnections;
 }
 
 TcpServer::TcpServer(unsigned short port):
@@ -66,12 +65,18 @@ void TcpServer::setPacketCallback(PacketCallbackType callback)
 
 bool TcpServer::setConnectionLimit(unsigned connections)
 {
+    bool status = false;
     if (connections <= maxConnections)
     {
         connectionLimit = connections;
-        return true;
+        status = true;
     }
-    return false;
+    return status;
+}
+
+void TcpServer::setClientTimeout(float t)
+{
+    timeout = t;
 }
 
 TcpServer::LockType TcpServer::getLock()
@@ -83,9 +88,9 @@ bool TcpServer::send(sf::Packet& packet)
 {
     bool status = true;
     LockType lock(internalMutex);
-    for (int id: clientIds)
+    for (auto& client: clients)
     {
-        if (!send(packet, id))
+        if (client.second.socket && client.second.socket->send(packet) != sf::Socket::Done)
             status = false;
     }
     return status;
@@ -95,8 +100,9 @@ bool TcpServer::send(sf::Packet& packet, int id)
 {
     bool status = false;
     LockType lock(internalMutex);
-    if (clientIsConnected(id))
-        status = (clients[id]->send(packet) == sf::Socket::Done);
+    auto found = clients.find(id);
+    if (clientIsConnected(found))
+        status = (found->second.socket->send(packet) == sf::Socket::Done);
     return status;
 }
 
@@ -114,9 +120,6 @@ void TcpServer::stop()
     selector.clear();
     selector.add(listener);
     clients.clear();
-    clientIds.clear();
-    freeClientIds.clear();
-    clientsToRemove.clear();
 }
 
 void TcpServer::join()
@@ -129,26 +132,23 @@ sf::IpAddress TcpServer::getClientAddress(int id) const
 {
     sf::IpAddress ip;
     LockType lock(internalMutex);
-    if (clientIsConnectedNoLock(id))
-        ip = clients[id]->getRemoteAddress();
+    auto found = clients.find(id);
+    if (clientIsConnected(found))
+        ip = found->second.socket->getRemoteAddress();
     return ip;
 }
 
 void TcpServer::kickClient(int id)
 {
-    // Disconnect and remove the client
+    // Remove the client (which also disconnects them)
     LockType lock(internalMutex);
-    if (clientIsConnectedNoLock(id))
-    {
-        clients[id]->disconnect();
-        removeClient(id);
-    }
+    removeClient(clients.find(id));
 }
 
 bool TcpServer::clientIsConnected(int id) const
 {
     LockType lock(internalMutex);
-    return clientIsConnectedNoLock(id);
+    return clientIsConnected(clients.find(id));
 }
 
 void TcpServer::serverLoop()
@@ -156,7 +156,7 @@ void TcpServer::serverLoop()
     running = true;
     while (running)
     {
-        //cout << "SERVER: Running loop...\n";
+        // Don't wait forever on the selector, so that the loop can gracefully end
         if (selector.wait(sf::milliseconds(500)))
         {
             LockType lock(internalMutex);
@@ -165,44 +165,57 @@ void TcpServer::serverLoop()
             else
                 receive();
         }
+        else
+        {
+            LockType lock(internalMutex);
+            receive();
+            // Just to remove old connections
+        }
     }
 }
 
 void TcpServer::receive()
 {
-    //cout << "SERVER: receive() called.\n";
-    // Loop through all of the clients (from last position), until something is received
-    bool status = false;
-    int totalIds = clientIds.size();
-    // count is used so that this will check every client
-    for (int count = 0; !status && count < totalIds; ++clientPos, ++count)
+    // Loop through all of the sockets, and receive any data
+    auto clientIter = clients.begin();
+    while (clientIter != clients.end())
     {
-        if (clientPos >= totalIds)
-            clientPos = 0;
-        int clientId = clientIds[clientPos];
-        //cout << "SERVER: Checking client " << clientId << ".\n";
-        if (clientIsConnectedNoLock(clientId) && selector.isReady(*clients[clientId]))
+        bool shouldRemoveClient = false;
+        auto& timer = clientIter->second.timer;
+        if (clientIter->second.socket)
         {
-            // Try to receive data from the socket
-            sf::Packet packet;
-            auto socketStatus = clients[clientId]->receive(packet);
-            if (socketStatus == sf::Socket::Done)
+            auto& client = *(clientIter->second.socket);
+            shouldRemoveClient = (client.getRemotePort() == 0);
+            if (!shouldRemoveClient && selector.isReady(client))
             {
-                // Handle the received data
-                status = true;
-                if (packetCallback)
+                // Try to receive data from the socket
+                sf::Packet packet;
+                auto socketStatus = client.receive(packet);
+                if (socketStatus == sf::Socket::Done)
                 {
-                    LockType lock(callbackMutex);
-                    packetCallback(packet, clientId);
+                    timer.restart();
+                    // Handle the received data
+                    if (packetCallback)
+                    {
+                        LockType lock(callbackMutex);
+                        packetCallback(packet, clientIter->first);
+                    }
                 }
+                else if (socketStatus != sf::Socket::NotReady)
+                    shouldRemoveClient = true;
             }
-            else if (socketStatus == sf::Socket::Error || socketStatus == sf::Socket::Disconnected)
-                clientsToRemove.push_back(clientId); // Remove the client
         }
+
+        // Check if the client has been idle for longer than the timeout
+        if (!shouldRemoveClient && timeout > 0.0f && timer.getElapsedTime().asSeconds() >= timeout)
+            shouldRemoveClient = true;
+
+        // Increment iterator, remove client if it needs to be removed
+        if (shouldRemoveClient)
+            clientIter = removeClient(clientIter);
+        else
+            ++clientIter;
     }
-    // TODO: Could maybe have a max idle time for connected clients,
-    // if they haven't sent/received data in a while
-    removeOldClients();
 }
 
 void TcpServer::acceptNewClient()
@@ -212,41 +225,23 @@ void TcpServer::acceptNewClient()
     if (listener.accept(*tmpClient) == sf::Socket::Done)
     {
         // Gracefully close any new connections over the limit
-        if (clientIds.size() < connectionLimit)
+        if (clients.size() < connectionLimit)
             addClient(std::move(tmpClient));
         else
             tmpClient.reset();
     }
 }
 
-void TcpServer::removeOldClients()
-{
-    for (int id: clientIds)
-    {
-        if (!clientIsConnectedNoLock(id))
-            clientsToRemove.push_back(id);
-    }
-    removeClientsToRemove();
-}
-
 int TcpServer::addClient(TcpSocketPtr newClient)
 {
-    int id = 0;
+    // Generate new ID
+    int id = lastId++;
+
+    // Add to the selector and the map
     selector.add(*newClient);
-    if (freeClientIds.empty())
-    {
-        // Generate a new ID and add a new client
-        id = clients.size();
-        clients.push_back(std::move(newClient));
-    }
-    else
-    {
-        // Use an existing ID and replace the client
-        id = freeClientIds.back();
-        freeClientIds.pop_back();
-        clients[id] = std::move(newClient);
-    }
-    clientIds.push_back(id);
+    clients[id].socket = std::move(newClient);
+
+    // Call the client connected callback
     if (connectedCallback)
     {
         LockType lock(callbackMutex);
@@ -255,23 +250,31 @@ int TcpServer::addClient(TcpSocketPtr newClient)
     return id;
 }
 
-void TcpServer::removeClient(int id)
+TcpServer::ClientMap::iterator TcpServer::removeClient(ClientMap::iterator it)
 {
-    // TODO: Come up with a more efficient way to do this
-    // Probably will need to use a set or different data structure
-    auto found = find(clientIds.begin(), clientIds.end(), id);
-    if (found != clientIds.end())
+    if (it != clients.end())
     {
-        clientIds.erase(found);
-        freeClientIds.push_back(id);
-        selector.remove(*clients[id]);
-        clients[id].reset();
+        // Remove the socket from the selector, and disconnect it
+        if (it->second.socket)
+        {
+            selector.remove(*it->second.socket);
+            it->second.socket->disconnect();
+        }
+
+        // Save the ID
+        int id = it->first;
+
+        // Remove the smart pointer from the map
+        it = clients.erase(it);
+
+        // Call the client disconnected callback
         if (disconnectedCallback)
         {
             LockType lock(callbackMutex);
             disconnectedCallback(id);
         }
     }
+    return it;
 }
 
 void TcpServer::setupClient(TcpSocketPtr& client)
@@ -284,17 +287,9 @@ void TcpServer::setupClient(TcpSocketPtr& client)
     }
 }
 
-void TcpServer::removeClientsToRemove()
+bool TcpServer::clientIsConnected(ClientMap::const_iterator it) const
 {
-    for (int id: clientsToRemove)
-        removeClient(id);
-    clientsToRemove.clear();
-}
-
-bool TcpServer::clientIsConnectedNoLock(int id) const
-{
-    // Checks if the client ID is valid, and if the TCP socket is created and connected
-    return (id >= 0 && id < (int)clients.size() && clients[id] && clients[id]->getRemotePort() != 0);
+    return (it != clients.end() && it->second.socket && it->second.socket->getRemotePort() != 0);
 }
 
 }

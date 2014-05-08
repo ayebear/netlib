@@ -25,10 +25,6 @@ It uses a single separate thread with a socket selector to handle all of the soc
         1023 connections on Linux
         1023 connections on Mac OS X
     (The listener takes up a slot in the socket selector)
-This used to use no threads, which made things simple and supported any number of connections.
-    However, this meant in order to keep things fast, you have to continually poll for new connections/packets.
-    This causes maximum CPU usage on 1 core, even at idle with 0 clients connected. One solution is to sleep
-    for a tiny amount of time, but this still increases latency and slows things down.
 
 To use this as a server, you must first set a listening port, then start the thread with start().
 To receive packets, or handle new clients connecting/disconnecting, set the callbacks.
@@ -46,6 +42,7 @@ class TcpServer
     using LockType = std::unique_lock<std::recursive_mutex>;
 
     public:
+
         #ifdef _WIN32
             static const unsigned maxConnections = 63;
         #else
@@ -62,6 +59,7 @@ class TcpServer
         void setDisconnectedCallback(CallbackType callback);
         void setPacketCallback(PacketCallbackType callback);
         bool setConnectionLimit(unsigned connections = maxConnections);
+        void setClientTimeout(float t = 0.0f);
 
         // Thread synchronization
         LockType getLock();
@@ -79,6 +77,15 @@ class TcpServer
         bool clientIsConnected(int id) const; // Checks if a client is connected (uses a lock)
 
     private:
+
+        struct TimedClient
+        {
+            TcpSocketPtr socket;
+            sf::Clock timer;
+        };
+
+        using ClientMap = std::map<int, TimedClient>;
+
         // Main loop for handling connections and receiving data
         void serverLoop();
 
@@ -87,12 +94,10 @@ class TcpServer
 
         // Clients
         void acceptNewClient();
-        void removeOldClients();
         int addClient(TcpSocketPtr newClient);
-        void removeClient(int id);
+        ClientMap::iterator removeClient(ClientMap::iterator it);
         void setupClient(TcpSocketPtr& client);
-        void removeClientsToRemove(); // Removes all clients in clientsToRemove list
-        bool clientIsConnectedNoLock(int id) const; // Checks if a client is connected
+        bool clientIsConnected(ClientMap::const_iterator it) const;
 
         // Callbacks
         CallbackType connectedCallback;
@@ -105,16 +110,15 @@ class TcpServer
         mutable std::recursive_mutex internalMutex;
         std::recursive_mutex callbackMutex;
 
+        // Networking and client management
         sf::SocketSelector selector; // Selector to handle the listener and sockets
         sf::TcpListener listener; // Listener for new connections
-        std::vector<TcpSocketPtr> clients; // Stores the pointers to the sockets (or clients)
-        std::vector<int> clientIds; // Uses this to iterate through the connected clients
-        std::vector<int> freeClientIds; // These IDs can be reused for new clients
-        std::vector<int> clientsToRemove; // Used to prevent loops from screwing up
-        TcpSocketPtr tmpClient; // This is used by the listener
-        int clientPos; // The current position in the clientIds vector
-        bool listenerAdded;
+        ClientMap clients; // Stores the pointers to the sockets (or clients)
+        TcpSocketPtr tmpClient; // This is used by the listener to accept connections
+        int lastId; // This is used to generate unique IDs by just incrementing
+        bool listenerAdded; // So the listener isn't added more than once
         unsigned connectionLimit; // Maximum number of open sockets
+        float timeout; // Time until idle client should be kicked
 };
 
 }

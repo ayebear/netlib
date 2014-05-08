@@ -62,10 +62,16 @@ bool Client::receive()
         storePacket(packet);
         packet.clear();
     }
-    if (tcpConnected && tcpSocket.receive(packet) == sf::Socket::Done)
+    if (tcpConnected)
     {
-        status = true;
-        storePacket(packet);
+        auto socketStatus = tcpSocket.receive(packet);
+        if (socketStatus == sf::Socket::Done)
+        {
+            status = true;
+            storePacket(packet);
+        }
+        else if (socketStatus != sf::Socket::NotReady)
+            tcpConnected = false;
     }
     return status;
 }
