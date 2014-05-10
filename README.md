@@ -83,6 +83,13 @@ server.join();
 
 #### Client
 
+* Note: This is being updated so that packets are handled immediately instead of being stored first (so it will be more efficient).
+  * This will greatly simplify the interface, removing all of the arePackets/getPacket/popPacket/clear functions.
+  * It will also fix all issues with packets being handled out of order.
+  * Finer control over what groups of callbacks should be called will be possible with the new receive() overloads.
+    * This way your application can be in different states, expecting only a subset of your packet types instead of all of them (which could possibly call functions in completely unrelated objects that aren't being dealt with at the moment)
+  * These changes should be committed in the next few days.
+
 * This class handles receiving/sending packets through TCP and/or UDP.
 * It will automatically put the packets it receives into different queues based on the first value in the packet, or the packet "type".
 * There is callback support for handling these packets automatically.
