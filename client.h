@@ -5,9 +5,9 @@
 #define CLIENT_H
 
 #include <map>
-#include <deque>
 #include <set>
 #include <functional>
+#include <initializer_list>
 #include <SFML/Network.hpp>
 #include "address.h"
 
@@ -16,80 +16,58 @@ namespace net
 
 /*
 About Client:
-This class handles connecting to a server, and receiving/sending packets through UDP or TCP.
-Received packets are stored into different containers based on their type.
-    Note: It only handles sf::Packet type packets.
-    Also, the packet type should be the first element in the packet and a 32-bit int.
-It is meant to be used with client-side applications, and can communicate with a single server.
-    If you need to communicate with multiple servers, simply make multiple instances of this class.
-There is support for both UDP and TCP, you can use one or both.
+    This class handles connecting to a server, and receiving/sending packets through UDP or TCP.
+    Packets should be of type sf::Packet, with the first value being an sf::Int32 representing
+        the type of data to be expected in the rest of the packet.
+    Packets get automatically handled by callbacks that you can set for each packet type.
+    It is meant to be used with client-side applications, and can communicate with a single server.
+        If you need to communicate with multiple servers, simply make multiple instances of this class.
 
 Usage:
-First, you should either connect to a TCP server with connect(),
-    and/or bind a UDP port with setUdpPort().
-Non-blocking sockets are used without threads, so in order for packets to be received, you must call
-    the receive() method, which will populate the containers with any new packets received.
-To read the packets, you would use getPacket() if there arePackets() for that type.
-    Then, you would call popPacket() so that the next call to getPacket() won't return the same packet.
-Alternatively, you can register callbacks to functions with this signature:
-    void handleSomePacketType(sf::Packet& packet);
-    using the registerCallback() method. Then, every time handlePackets() is called, the registered
-    callbacks will be called for any new packets received. A callback will be called for each packet,
-    and those packets will automatically be removed.
+    Refer to README.md.
 
 Near-future plans:
-    Make it more clear on what uses TCP and what uses UDP by naming them more specifically.
     Make the packet header type templated
-        This would let you use a string, char, or anything else
+        This would let you use a string, char, or anything else that can go into an sf::Packet
     Allow raw binary packets (not sure if there is an easy way to determine this)
-        They could just be stored in their own separate deque
 */
 class Client
 {
     using PacketType = sf::Int32;
-    using PacketQueue = std::deque<sf::Packet>;
     using AddressSet = std::set<Address>;
     using CallbackType = std::function<void(sf::Packet&)>;
 
     public:
         // Constructors/setup
         Client();
-        bool connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout=sf::Time::Zero);
-        bool connect(const Address& address, sf::Time timeout=sf::Time::Zero);
+
+        // TCP socket
+        bool connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout = sf::Time::Zero);
+        bool connect(const Address& address, sf::Time timeout = sf::Time::Zero);
         void disconnect();
-            // Note that packets can only be received from the connected address through TCP, so there
-            // is no need for checking for safe addresses.
-        void setUdpPort(unsigned short port); // Bind UDP port to receive data on
+
+        // UDP socket
+        void bindPort(unsigned short port); // Bind UDP port to receive data on
         void setSafeAddresses(AddressSet& addresses); // Only accept UDP packets from these addresses
             // Note: If this is not set, then it will accept all packets
 
         // Communication
-        bool update(); // Calls receive and handlePackets
-        bool receive(); // Tries to receive data on all sockets, returns true if anything was received
-        bool tcpSend(sf::Packet& packet);
-        bool udpSend(sf::Packet& packet, const Address& address);
-        bool udpSend(sf::Packet& packet, const sf::IpAddress& address, unsigned short port);
+        bool receive(const std::string& groupName = ""); // Receives and handles all or specified packet types
+        bool send(sf::Packet& packet); // Send packet through TCP
+        bool send(sf::Packet& packet, const Address& address); // Send packet through UDP
+        bool send(sf::Packet& packet, const sf::IpAddress& address, unsigned short port); // Send packet through UDP
         bool isConnected() const; // Returns true if connected through TCP
 
-        // Packets
-        sf::Packet& getPacket(PacketType type); // Returns a packet
-        bool popPacket(PacketType type); // Removes a packet (returns true if a packet was removed)
-        bool arePackets(PacketType type) const; // Returns true if there are any packets
-        void clear(); // Clears all packets of all types
-        void clear(PacketType type); // Clears all packets of a specific type
-        void setValidTypeRange(PacketType min, PacketType max);
-            // Newly received packets will only be accepted if within this range
-
-        // Callbacks for handling packets
+        // Packet handling
         void registerCallback(PacketType type, CallbackType callback);
-            // Registers (or re-registers) a callback for a specific packet type
-        void handlePackets();
-            // Calls all of the callbacks registered for the packet types received
+        void setGroup(const std::string& groupName, std::initializer_list<PacketType> packetTypes);
 
     private:
-        void storePacket(sf::Packet& packet); // Stores packets into the map
-        bool isValidType(PacketType type) const; // Applies if you have a valid type range set
-        bool isSafeAddress(const Address& address) const; // Applies if you set the safe addresses
+        bool receiveUdp(const std::string& groupName = "");
+        bool receiveTcp(const std::string& groupName = "");
+        void handlePacket(sf::Packet& packet, const std::string& groupName = "");
+        void handlePacketType(sf::Packet& packet, PacketType type);
+        bool isSafeAddress(const Address& address) const;
 
         // Sockets
         sf::TcpSocket tcpSocket;
@@ -97,16 +75,11 @@ class Client
         bool tcpConnected;
         bool udpReady;
 
-        // All of the received packets are stored here
-        std::map<PacketType, PacketQueue> packets;
-
         // Callbacks are stored in here
         std::map<PacketType, CallbackType> callbacks;
 
-        // Valid packet type range
-        PacketType minType;
-        PacketType maxType;
-        bool typeRangeSet;
+        // Groups of packet types are stored in here
+        std::map<std::string, std::set<PacketType> > groups;
 
         // UDP packets will only be received from these addresses
         AddressSet safeAddresses;

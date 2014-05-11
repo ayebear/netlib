@@ -8,8 +8,7 @@ namespace net
 
 Client::Client():
     tcpConnected(false),
-    udpReady(false),
-    typeRangeSet(false)
+    udpReady(false)
 {
     udpSocket.setBlocking(false);
     tcpSocket.setBlocking(false);
@@ -31,9 +30,10 @@ bool Client::connect(const Address& address, sf::Time timeout)
 void Client::disconnect()
 {
     tcpSocket.disconnect();
+    tcpConnected = false;
 }
 
-void Client::setUdpPort(unsigned short port)
+void Client::bindPort(unsigned short port)
 {
     udpSocket.bind(port);
     udpReady = true;
@@ -44,49 +44,24 @@ void Client::setSafeAddresses(AddressSet& addresses)
     safeAddresses = addresses;
 }
 
-bool Client::update()
+bool Client::receive(const std::string& groupName)
 {
-    bool status = receive();
-    handlePackets();
+    bool status = receiveUdp(groupName);
+    status |= receiveTcp(groupName);
     return status;
 }
 
-bool Client::receive()
+bool Client::send(sf::Packet& packet)
 {
-    bool status = false;
-    Address address;
-    sf::Packet packet;
-    if (udpReady && udpSocket.receive(packet, address.ip, address.port) == sf::Socket::Done && isSafeAddress(address))
-    {
-        status = true;
-        storePacket(packet);
-        packet.clear();
-    }
-    if (tcpConnected)
-    {
-        auto socketStatus = tcpSocket.receive(packet);
-        if (socketStatus == sf::Socket::Done)
-        {
-            status = true;
-            storePacket(packet);
-        }
-        else if (socketStatus != sf::Socket::NotReady)
-            tcpConnected = false;
-    }
-    return status;
+    return (tcpConnected && tcpSocket.send(packet) == sf::Socket::Done);
 }
 
-bool Client::tcpSend(sf::Packet& packet)
-{
-    return (tcpSocket.send(packet) == sf::Socket::Done);
-}
-
-bool Client::udpSend(sf::Packet& packet, const Address& address)
+bool Client::send(sf::Packet& packet, const Address& address)
 {
     return (udpSocket.send(packet, address.ip, address.port) == sf::Socket::Done);
 }
 
-bool Client::udpSend(sf::Packet& packet, const sf::IpAddress& address, unsigned short port)
+bool Client::send(sf::Packet& packet, const sf::IpAddress& address, unsigned short port)
 {
     return (udpSocket.send(packet, address, port) == sf::Socket::Done);
 }
@@ -96,74 +71,81 @@ bool Client::isConnected() const
     return tcpConnected;
 }
 
-sf::Packet& Client::getPacket(PacketType type)
-{
-    return (packets[type].front());
-}
-
-bool Client::popPacket(PacketType type)
-{
-    packets[type].pop_front();
-    return (arePackets(type));
-}
-
-bool Client::arePackets(PacketType type) const
-{
-    auto found = packets.find(type);
-    return (found != packets.end() && !found->second.empty());
-}
-
-void Client::clear()
-{
-    packets.clear();
-}
-
-void Client::clear(PacketType type)
-{
-    packets[type].clear();
-}
-
-void Client::setValidTypeRange(PacketType min, PacketType max)
-{
-    minType = min;
-    maxType = max;
-    typeRangeSet = true;
-}
-
 void Client::registerCallback(PacketType type, CallbackType callback)
 {
     callbacks[type] = callback;
 }
 
-void Client::handlePackets()
+void Client::setGroup(const std::string& groupName, std::initializer_list<PacketType> packetTypes)
 {
-    // Loop through each registered callback
-    for (auto& handler: callbacks)
+    groups[groupName] = packetTypes;
+}
+
+bool Client::receiveUdp(const std::string& groupName)
+{
+    // Receive and handle any UDP packets
+    bool status = false;
+    if (udpReady)
     {
-        auto type = handler.first;
-        auto callback = handler.second;
-        if (callback) // Make sure the callback was set properly
+        Address address;
+        sf::Packet packet;
+        while (udpSocket.receive(packet, address.ip, address.port) == sf::Socket::Done)
         {
-            // Handle all of the packets received of this type
-            while (arePackets(type))
+            if (isSafeAddress(address))
             {
-                callback(getPacket(type));
-                popPacket(type);
+                status = true;
+                handlePacket(packet, groupName);
             }
+        }
+    }
+    return status;
+}
+
+bool Client::receiveTcp(const std::string& groupName)
+{
+    // Receive and handle any TCP packets
+    bool status = false;
+    if (tcpConnected)
+    {
+        sf::Packet packet;
+        auto socketStatus = tcpSocket.receive(packet);
+        while (socketStatus == sf::Socket::Done)
+        {
+            status = true;
+            handlePacket(packet, groupName);
+            socketStatus = tcpSocket.receive(packet);
+        }
+        if (socketStatus == sf::Socket::Disconnected || socketStatus == sf::Socket::Error)
+            tcpConnected = false;
+    }
+    return status;
+}
+
+void Client::handlePacket(sf::Packet& packet, const std::string& groupName)
+{
+    // Extract the packet type and make sure it is valid
+    PacketType type = -1;
+    if (packet >> type)
+    {
+        // Handle the packet if no group name is specified
+        if (groupName.empty())
+            handlePacketType(packet, type);
+        else
+        {
+            // Only handle the packet if the type is part of the group
+            auto groupFound = groups.find(groupName);
+            if (groupFound != groups.end() && groupFound->second.find(type) != groupFound->second.end())
+                handlePacketType(packet, type);
         }
     }
 }
 
-void Client::storePacket(sf::Packet& packet)
+void Client::handlePacketType(sf::Packet& packet, PacketType type)
 {
-    PacketType type = -1;
-    if (packet >> type && isValidType(type))
-        packets[type].push_back(packet);
-}
-
-bool Client::isValidType(PacketType type) const
-{
-    return (!typeRangeSet || (type >= minType && type <= maxType));
+    // Lookup the callback to use, and call it if it exists
+    auto found = callbacks.find(type);
+    if (found != callbacks.end() && found->second)
+        found->second(packet);
 }
 
 bool Client::isSafeAddress(const Address& address) const
