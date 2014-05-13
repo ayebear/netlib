@@ -20,23 +20,16 @@ For more advanced usage of these classes, please refer to the header files.
 * This class handles managing TCP connections to multiple clients.
 * It uses a single thread for both handling connections and receiving packets.
 * You can easily connect to this using a TCP socket or a net::Client.
-* Callbacks can be set for the following events:
-  * Client connected
-    * Callback type: void(int)
-    * The parameter passed is the client's unique ID.
-  * Client disconnected
-    * Callback type: void(int)
-    * The parameter passed is the client's unique ID.
-  * Packet received
-    * Callback type: void(sf::Packet&, int)
-    * The packet parameter passed is the packet received.
-    * The int parameter passed is the client's unique ID.
-* With these callbacks, you can easily determine which client sent what, and manage the clients in your own way.
-  * For example, you could store an std::map of the clients' information.
-  * The key would be the ID, and the value could be some structure of data associated with a client.
-  * In your callback functions, you could add/remove the clients when they connect/disconnect, or when they authenticate with a packet.
+* Callbacks are used to handle different events (so you don't need to poll).
 
 ##### Example usage
+
+Required steps for the server to work properly:
+* Set listening port in constructor or with setListeningPort()
+* Set packet handler callback with setPacketCallback()
+* Call start() on the server object
+
+###### Include and create instance
 
 ```
 #include "tcpserver.h"
@@ -47,13 +40,72 @@ net::TcpServer server(2500);
 // You can also set the listening port after construction
 net::TcpServer server;
 server.setListeningPort(2500);
+```
 
-// Setup callbacks
+###### Setup callbacks
+
+Callbacks can be set for the following events:
+* Client connected
+  * Callback type: void(int)
+  * The parameter passed is the client's unique ID.
+* Client disconnected
+  * Callback type: void(int)
+  * The parameter passed is the client's unique ID.
+* Packet received
+  * Callback type: void(sf::Packet&, int)
+  * The packet parameter passed is the packet received.
+  * The int parameter passed is the client's unique ID.
+
+With these callbacks, you can easily determine which client sent what, and manage the clients in your own way.
+* For example, you could store an std::map of the clients' information.
+* The key would be the ID, and the value could be some structure of data associated with a client.
+* In your callback functions, you could add/remove the clients when they connect/disconnect, or when they authenticate with a packet.
+
+Basic example:
+```
+void handlePacket(sf::Packet& packet, int id)
+{
+    std::string str;
+    packet >> str;
+    std::cout << "Packet received from " << id << ": " << str << "\n";
+}
+server.setPacketCallback(handlePacket);
+```
+
+Normally, you will want to use methods inside of classes, so here is an example with std::bind:
+```
+class MyServer
+{
+    public:
+        void handlePacket(sf::Packet& packet, int id) {/*...*/}
+};
+MyServer myCustomServer;
 using namespace std::placeholders;
-server.setPacketCallback(std::bind(&MyServer::handlePacket, this, _1, _2));
-server.setConnectedCallback(std::bind(&MyServer::handleClientConnected, this, _1));
-server.setDisconnectedCallback(std::bind(&MyServer::handleClientDisconnected, this, _1));
+server.setPacketCallback(std::bind(&MyServer::handlePacket, myCustomServer, _1, _2));
 
+// Also set the connected/disconnected callbacks
+server.setConnectedCallback(std::bind(&MyServer::handleClientConnected, myCustomServer, _1));
+server.setDisconnectedCallback(std::bind(&MyServer::handleClientDisconnected, myCustomServer, _1));
+```
+
+For more information on std::bind, see this: http://en.cppreference.com/w/cpp/utility/functional/bind
+
+###### Other settings
+
+```
+// Set maximum simultaneous connections
+server.setConnectionLimit(16);
+
+// Get maximum supported connections (OS dependent)
+unsigned maxSupportedConnections = net::TcpServer::maxConnections;
+
+// Set idle client timeout to 10 seconds
+server.setClientTimeout(10.0f);
+```
+
+###### Running the server
+
+```
 // Start the server (spawns a new thread, then returns)
 server.start();
 
@@ -83,64 +135,92 @@ server.join();
 
 #### Client
 
-* Note: This is being updated so that packets are handled immediately instead of being stored first (so it will be more efficient).
-  * This will greatly simplify the interface, removing all of the arePackets/getPacket/popPacket/clear functions.
-  * It will also fix all issues with packets being handled out of order.
-  * Finer control over what groups of callbacks should be called will be possible with the new receive() overloads.
-    * This way your application can be in different states, expecting only a subset of your packet types instead of all of them (which could possibly call functions in completely unrelated objects that aren't being dealt with at the moment)
-  * These changes should be committed in the next few days.
-
 * This class handles receiving/sending packets through TCP and/or UDP.
-* It will automatically put the packets it receives into different queues based on the first value in the packet, or the packet "type".
-* There is callback support for handling these packets automatically.
+* Callbacks are used to handle different packet types.
   * Callback type: void(sf::Packet&)
   * You can register a callback for each packet type, using the registerCallback() method.
-  * Note: The callbacks are called in order of the packet type, from smallest to largest.
 
 ##### Example usage
+
+Required steps for the client to work properly:
+* Register at least one packet callback.
+* Connect to a server with TCP, or bind a UDP port.
+* Call the receive() method when you want to handle the received packets.
+
+###### Include and define some things
 
 ```
 #include "client.h"
 
 // It is recommended to setup an enum for the packet types
-enum PacketTypes {Message = 0, AddNumbers, TotalTypes};
+enum PacketTypes {Message = 0, AddNumbers, AnotherType, TotalTypes};
 
-// You can make separate functions or lambdas for handling packets
-auto handleMessage = [](sf::Packet& packet)
+// Define your packet handling functions/lambdas
+void handleMessage(sf::Packet& packet)
 {
     std::string str;
     if (packet >> str)
         std::cout << "Message received: " << str << std::endl;
 };
 
-auto handleAddNumbers = [](sf::Packet& packet)
+void handleAddNumbers(sf::Packet& packet)
 {
     int a = 0;
     int b = 0;
     if (packet >> a >> b)
         std::cout << a << " + " << b << " = " << (a + b) << std::endl;
 };
+```
 
+###### Create and setup client instance
+
+```
 // Create a client object
 net::Client client;
-
-// Set the valid range of packet types to receive
-client.setValidTypeRange(0, TotalTypes);
 
 // Register callbacks for packet handling functions
 client.registerCallback(Message, handleMessage);
 client.registerCallback(AddNumbers, handleAddNumbers);
 // Note: You can register as many callbacks as you'd like, but only one per type.
 
-// In some loop (like your application's loop), call update()
-client.update();
-// This will receive and store all valid packets,
-// and invoke the callbacks to handle them.
-// If you don't want to use callbacks, you can use the arePackets/getPacket/popPacket functions.
+// Setup packet type groups (refer to the PacketTypes enum defined earlier)
+client.setGroup("someGroup", {Message, AnotherType});
+client.setGroup("group2", {AddNumbers});
+// Note: Setting groups is completely optional.
+// Note: You can register as many groups as you'd like, with any number of packet types in the initializer list.
+```
 
-// You can also send packets to the server you are connected to
+###### Receiving and handling packets
+
+Calling the receive() method will receive data from all of the sockets, and then invoke all of the registered callbacks (or the group that was specified).
+
+Normally you would want to call this continually in your application's loop.
+
+```
+// Receives and handles all registered packet types
+client.receive();
+
+// Receives and handles just the specified packet types
+client.receive("someGroup");
+```
+
+Notice before when "someGroup" was setup, that only "Message" and "AnotherType" were added. This means that when receive is called, it will only handle those two packet types, completely dropping all packets of type "AddNumbers". This is useful in applications that have different states and shouldn't be invoking callbacks in unrelated objects at that point in time.
+
+###### Sending packets
+
+```
 sf::Packet packet;
-client.tcpSend(packet);
+packet << "some data";
+
+// Send packet through TCP to currently connected server
+client.send(packet);
+
+// Send packet through UDP to some address
+client.send(packet, "10.0.0.1", 2500);
+
+// You can also use a net::Address object
+net::Address address("10.0.0.1:2500");
+client.send(packet, address);
 ```
 
 ### Other
