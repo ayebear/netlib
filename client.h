@@ -6,6 +6,7 @@
 
 #include <map>
 #include <set>
+#include <deque>
 #include <functional>
 #include <initializer_list>
 #include <SFML/Network.hpp>
@@ -61,6 +62,8 @@ class Client
         // Packet handling
         void registerCallback(PacketType type, CallbackType callback);
         void setGroup(const std::string& groupName, std::initializer_list<PacketType> packetTypes);
+        void keepOnly(const std::string& groupName); // Removes all other packets
+        void clear(); // Removes all of the stored unhandled packets
 
     private:
         bool receiveUdp(const std::string& groupName = "");
@@ -68,6 +71,8 @@ class Client
         void handlePacket(sf::Packet& packet, const std::string& groupName = "");
         void handlePacketType(sf::Packet& packet, PacketType type);
         bool isSafeAddress(const Address& address) const;
+        void storePacket(sf::Packet& packet, PacketType type);
+        bool handleStoredPackets(const std::string& groupName = "");
 
         // Sockets
         sf::TcpSocket tcpSocket;
@@ -80,6 +85,10 @@ class Client
 
         // Groups of packet types are stored in here
         std::map<std::string, std::set<PacketType> > groups;
+
+        // Packets to be handled when specified
+        using PacketPair = std::pair<PacketType, sf::Packet>;
+        std::deque<PacketPair> packets;
 
         // UDP packets will only be received from these addresses
         AddressSet safeAddresses;

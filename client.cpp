@@ -16,6 +16,7 @@ Client::Client():
 
 bool Client::connect(const sf::IpAddress& address, unsigned short port, sf::Time timeout)
 {
+    // Use a blocking connect
     tcpSocket.setBlocking(true);
     tcpConnected = (tcpSocket.connect(address, port, timeout) == sf::Socket::Done);
     tcpSocket.setBlocking(false);
@@ -46,8 +47,11 @@ void Client::setSafeAddresses(AddressSet& addresses)
 
 bool Client::receive(const std::string& groupName)
 {
-    bool status = receiveUdp(groupName);
+    // Handle the stored packets first, since those are the oldest
+    bool status = handleStoredPackets(groupName);
+    status |= receiveUdp(groupName);
     status |= receiveTcp(groupName);
+    // This returns true if anything was handled or received
     return status;
 }
 
@@ -79,6 +83,25 @@ void Client::registerCallback(PacketType type, CallbackType callback)
 void Client::setGroup(const std::string& groupName, std::initializer_list<PacketType> packetTypes)
 {
     groups[groupName] = packetTypes;
+}
+
+void Client::keepOnly(const std::string& groupName)
+{
+    auto groupFound = groups.find(groupName);
+    if (groupFound != groups.end())
+    {
+        auto shouldRemove = [&](const PacketPair& packet)
+        {
+            // The packet should be removed if the type is not found in the group
+            return (groupFound->second.find(packet.first) == groupFound->second.end());
+        };
+        packets.erase(std::remove_if(packets.begin(), packets.end(), shouldRemove), packets.end());
+    }
+}
+
+void Client::clear()
+{
+    packets.clear();
 }
 
 bool Client::receiveUdp(const std::string& groupName)
@@ -132,10 +155,13 @@ void Client::handlePacket(sf::Packet& packet, const std::string& groupName)
             handlePacketType(packet, type);
         else
         {
-            // Only handle the packet if the type is part of the group
+            // Only handle the packet if the group is valid and the type is part of the group
+            // Otherwise, store the packet for later
             auto groupFound = groups.find(groupName);
             if (groupFound != groups.end() && groupFound->second.find(type) != groupFound->second.end())
                 handlePacketType(packet, type);
+            else
+                storePacket(packet, type);
         }
     }
 }
@@ -151,6 +177,48 @@ void Client::handlePacketType(sf::Packet& packet, PacketType type)
 bool Client::isSafeAddress(const Address& address) const
 {
     return (safeAddresses.empty() || safeAddresses.find(address) != safeAddresses.end());
+}
+
+void Client::storePacket(sf::Packet& packet, PacketType type)
+{
+    packets.emplace_back(type, packet);
+}
+
+bool Client::handleStoredPackets(const std::string& groupName)
+{
+    bool status = false;
+    if (!packets.empty())
+    {
+        if (groupName.empty())
+        {
+            // Handle all of the stored packets, then clear them
+            for (auto& packet: packets)
+                handlePacketType(packet.second, packet.first);
+            packets.clear();
+            status = true;
+        }
+        else
+        {
+            auto groupFound = groups.find(groupName);
+            if (groupFound != groups.end())
+            {
+                // Handle only the specified packets, and erase them
+                auto packet = packets.begin();
+                while (packet != packets.end())
+                {
+                    if (groupFound->second.find(packet->first) != groupFound->second.end())
+                    {
+                        handlePacketType(packet->second, packet->first);
+                        packet = packets.erase(packet);
+                        status = true;
+                    }
+                    else
+                        ++packet;
+                }
+            }
+        }
+    }
+    return status;
 }
 
 }
