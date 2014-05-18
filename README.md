@@ -206,6 +206,8 @@ client.receive("someGroup");
 
 Notice before when "someGroup" was setup, that only "Message" and "AnotherType" were added. This means that when receive is called, it will only handle those two packet types, completely dropping all packets of type "AddNumbers". This is useful in applications that have different states and shouldn't be invoking callbacks in unrelated objects at that point in time.
 
+Note: This may change in the future. Sometimes you may need those packets that are dropped, so it might need to store them in a temporary container, to be handled later. So basically, receive() would always receive all registered packet types, handling the specified ones (or all of them). The packets received that were not specified to be handled would be stored in a queue. These packets would be handled as soon as receive() is called again, before checking the network sockets. This way, no data is lost, but you can still control which callbacks are called to prevent things changing in different states.
+
 ###### Sending packets
 
 ```
