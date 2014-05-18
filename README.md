@@ -192,7 +192,7 @@ client.setGroup("group2", {AddNumbers});
 
 ###### Receiving and handling packets
 
-Calling the receive() method will receive data from all of the sockets, and then invoke all of the registered callbacks (or the group that was specified).
+Calling the receive() method will receive data from all of the sockets, and then invoke all of the registered callbacks (or the group that was specified). Packets that were not handled (but have registered callbacks), are stored in a container. These stored packets are the first thing handled in the receive() method, as long as they match the specified type. They will stay in the container until they are handled, or until a call to clear() or keepOnly().
 
 Normally you would want to call this continually in your application's loop.
 
@@ -202,11 +202,16 @@ client.receive();
 
 // Receives and handles just the specified packet types
 client.receive("someGroup");
+
+// Removes all packets except for the ones whose types are in "group2"
+// In this case, "AddNumbers" packets would be the only packets remaining
+client.keepOnly("group2");
+
+// Removes all of the stored unhandled packets
+client.clear();
 ```
 
-Notice before when "someGroup" was setup, that only "Message" and "AnotherType" were added. This means that when receive is called, it will only handle those two packet types, completely dropping all packets of type "AddNumbers". This is useful in applications that have different states and shouldn't be invoking callbacks in unrelated objects at that point in time.
-
-Note: This may change in the future. Sometimes you may need those packets that are dropped, so it might need to store them in a temporary container, to be handled later. So basically, receive() would always receive all registered packet types, handling the specified ones (or all of them). The packets received that were not specified to be handled would be stored in a queue. These packets would be handled as soon as receive() is called again, before checking the network sockets. This way, no data is lost, but you can still control which callbacks are called to prevent things changing in different states.
+Notice before when "someGroup" was setup, that only "Message" and "AnotherType" were added. This means that when receive is called, it will only handle those two packet types, and storing (not handling) any packets of type "AddNumbers". This is useful in applications that have different states and shouldn't be invoking callbacks in unrelated objects at that point in time.
 
 ###### Sending packets
 
