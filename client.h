@@ -34,11 +34,18 @@ Near-future plans:
 */
 class Client
 {
-    using PacketType = sf::Int32;
-    using AddressSet = std::set<Address>;
-    using CallbackType = std::function<void(sf::Packet&)>;
-
     public:
+        // Types
+        using PacketType = sf::Int32;
+        using AddressSet = std::set<Address>;
+        using CallbackType = std::function<void(sf::Packet&)>;
+        enum Status
+        {
+            Nothing = 0,
+            Received = 1,
+            Handled = 2
+        };
+
         // Constructors/setup
         Client();
 
@@ -53,7 +60,7 @@ class Client
             // Note: If this is not set, then it will accept all packets
 
         // Communication
-        bool receive(const std::string& groupName = ""); // Receives and handles all or specified packet types
+        int receive(const std::string& groupName = ""); // Receives and handles all or specified packet types
         bool send(sf::Packet& packet); // Send packet through TCP
         bool send(sf::Packet& packet, const Address& address); // Send packet through UDP
         bool send(sf::Packet& packet, const sf::IpAddress& address, unsigned short port); // Send packet through UDP
@@ -66,13 +73,13 @@ class Client
         void clear(); // Removes all of the stored unhandled packets
 
     private:
-        bool receiveUdp(const std::string& groupName = "");
-        bool receiveTcp(const std::string& groupName = "");
-        void handlePacket(sf::Packet& packet, const std::string& groupName = "");
+        int receiveUdp(const std::string& groupName = "");
+        int receiveTcp(const std::string& groupName = "");
+        int handlePacket(sf::Packet& packet, const std::string& groupName = "");
         void handlePacketType(sf::Packet& packet, PacketType type);
         bool isSafeAddress(const Address& address) const;
         void storePacket(sf::Packet& packet, PacketType type);
-        bool handleStoredPackets(const std::string& groupName = "");
+        int handleStoredPackets(const std::string& groupName = "");
 
         // Sockets
         sf::TcpSocket tcpSocket;

@@ -45,10 +45,10 @@ void Client::setSafeAddresses(AddressSet& addresses)
     safeAddresses = addresses;
 }
 
-bool Client::receive(const std::string& groupName)
+int Client::receive(const std::string& groupName)
 {
     // Handle the stored packets first, since those are the oldest
-    bool status = handleStoredPackets(groupName);
+    int status = handleStoredPackets(groupName);
     status |= receiveUdp(groupName);
     status |= receiveTcp(groupName);
     // This returns true if anything was handled or received
@@ -104,10 +104,10 @@ void Client::clear()
     packets.clear();
 }
 
-bool Client::receiveUdp(const std::string& groupName)
+int Client::receiveUdp(const std::string& groupName)
 {
     // Receive and handle any UDP packets
-    bool status = false;
+    int status = Nothing;
     if (udpReady)
     {
         Address address;
@@ -116,26 +116,26 @@ bool Client::receiveUdp(const std::string& groupName)
         {
             if (isSafeAddress(address))
             {
-                status = true;
-                handlePacket(packet, groupName);
+                status |= Received;
+                status |= handlePacket(packet, groupName);
             }
         }
     }
     return status;
 }
 
-bool Client::receiveTcp(const std::string& groupName)
+int Client::receiveTcp(const std::string& groupName)
 {
     // Receive and handle any TCP packets
-    bool status = false;
+    int status = Nothing;
     if (tcpConnected)
     {
         sf::Packet packet;
         auto socketStatus = tcpSocket.receive(packet);
         while (socketStatus == sf::Socket::Done)
         {
-            status = true;
-            handlePacket(packet, groupName);
+            status |= Received;
+            status |= handlePacket(packet, groupName);
             socketStatus = tcpSocket.receive(packet);
         }
         if (socketStatus == sf::Socket::Disconnected || socketStatus == sf::Socket::Error)
@@ -144,26 +144,34 @@ bool Client::receiveTcp(const std::string& groupName)
     return status;
 }
 
-void Client::handlePacket(sf::Packet& packet, const std::string& groupName)
+int Client::handlePacket(sf::Packet& packet, const std::string& groupName)
 {
+    int status = Nothing;
     // Extract the packet type and make sure it is valid
     PacketType type = -1;
     if (packet >> type)
     {
         // Handle the packet if no group name is specified
         if (groupName.empty())
+        {
             handlePacketType(packet, type);
+            status = Handled;
+        }
         else
         {
             // Only handle the packet if the group is valid and the type is part of the group
             // Otherwise, store the packet for later
             auto groupFound = groups.find(groupName);
             if (groupFound != groups.end() && groupFound->second.find(type) != groupFound->second.end())
+            {
                 handlePacketType(packet, type);
+                status = Handled;
+            }
             else
                 storePacket(packet, type);
         }
     }
+    return status;
 }
 
 void Client::handlePacketType(sf::Packet& packet, PacketType type)
@@ -184,9 +192,9 @@ void Client::storePacket(sf::Packet& packet, PacketType type)
     packets.emplace_back(type, packet);
 }
 
-bool Client::handleStoredPackets(const std::string& groupName)
+int Client::handleStoredPackets(const std::string& groupName)
 {
-    bool status = false;
+    int status = Nothing;
     if (!packets.empty())
     {
         if (groupName.empty())
@@ -195,7 +203,7 @@ bool Client::handleStoredPackets(const std::string& groupName)
             for (auto& packet: packets)
                 handlePacketType(packet.second, packet.first);
             packets.clear();
-            status = true;
+            status = Handled;
         }
         else
         {
@@ -210,7 +218,7 @@ bool Client::handleStoredPackets(const std::string& groupName)
                     {
                         handlePacketType(packet->second, packet->first);
                         packet = packets.erase(packet);
-                        status = true;
+                        status = Handled;
                     }
                     else
                         ++packet;
