@@ -84,18 +84,6 @@ TcpServer::LockType TcpServer::getLock()
     return LockType(callbackMutex);
 }
 
-bool TcpServer::send(sf::Packet& packet)
-{
-    bool status = true;
-    LockType lock(internalMutex);
-    for (auto& client: clients)
-    {
-        if (client.second.socket && client.second.socket->send(packet) != sf::Socket::Done)
-            status = false;
-    }
-    return status;
-}
-
 bool TcpServer::send(sf::Packet& packet, int id)
 {
     bool status = false;
@@ -103,6 +91,22 @@ bool TcpServer::send(sf::Packet& packet, int id)
     auto found = clients.find(id);
     if (clientIsConnected(found))
         status = (found->second.socket->send(packet) == sf::Socket::Done);
+    return status;
+}
+
+bool TcpServer::sendToAll(sf::Packet& packet, int id)
+{
+    bool status = true;
+    LockType lock(internalMutex);
+    for (auto& client: clients)
+    {
+        // Don't send anything to the excluded client
+        if (id != client.first && client.second.socket)
+        {
+            if (client.second.socket->send(packet) != sf::Socket::Done)
+                status = false;
+        }
+    }
     return status;
 }
 

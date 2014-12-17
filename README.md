@@ -131,6 +131,23 @@ server.join();
 // This will block forever as long as the server is running
 ```
 
+###### Sending packets to clients
+
+Send to a specific client:
+```
+server.send(packet, clientId);
+```
+
+Send to all clients:
+```
+server.sendToAll(packet);
+```
+
+Send to all clients except one:
+```
+server.sendToAll(packet, clientToExclude);
+```
+
 ### Client-side:
 
 #### Client

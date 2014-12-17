@@ -65,8 +65,8 @@ class TcpServer
         LockType getLock();
 
         // Communication
-        bool send(sf::Packet& packet); // Send to all
         bool send(sf::Packet& packet, int id); // Send to specific client
+        bool sendToAll(sf::Packet& packet, int id = -1); // Send to all (with an optional exclusion)
         void start(); // Launches the server loop thread
         void stop(); // Stops the server loop thread
         void join(); // Waits for the server thread to finish running
